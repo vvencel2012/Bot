@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Вероника</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1E1624; --panel:#271C2E; --her:#352741; --me:#C98A93; --me-text:#2A1520;
+  --text:#EFE5EC; --muted:#9E8CA5; --line:#3A2C44; --danger:#E59A8C;
+  --font:"Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.45 var(--font);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.app{height:100%;max-width:560px;margin:0 auto;display:flex;flex-direction:column}
+
+header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.ava{width:40px;height:40px;border-radius:50%;background:var(--me);color:var(--me-text);
+  display:grid;place-items:center;font-weight:600;font-size:17px;flex:none}
+.who{flex:1;min-width:0}
+.who b{display:block;font-weight:600}
+.status{font-size:13px;color:var(--muted)}
+.status.typing{color:var(--me)}
+.icon{background:none;border:0;color:var(--muted);font-size:20px;padding:6px;border-radius:8px;cursor:pointer}
+.icon:hover,.icon:focus-visible{color:var(--text);outline:none;background:var(--line)}
+
+#log{flex:1;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:6px}
+.msg{max-width:80%;padding:8px 12px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word}
+.her{align-self:flex-start;background:var(--her);border-bottom-left-radius:5px}
+.me{align-self:flex-end;background:var(--me);color:var(--me-text);border-bottom-right-radius:5px}
+.photo{padding:4px;max-width:70%}
+.photo img{display:block;width:100%;border-radius:12px;cursor:zoom-in}
+.sys{align-self:center;font-size:13px;color:var(--muted);text-align:center;max-width:90%;padding:4px 0}
+.sys.err{color:var(--danger)}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:260px}
+
+form.bar{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:var(--panel)}
+#text{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:20px;
+  padding:10px 14px;font:inherit;resize:none;max-height:120px}
+#text:focus{outline:none;border-color:var(--me)}
+.send{background:var(--me);color:var(--me-text);border:0;border-radius:50%;width:42px;height:42px;
+  font-size:18px;cursor:pointer;flex:none}
+.send:disabled{opacity:.5;cursor:default}
+.cam{width:42px;height:42px;flex:none;font-size:19px}
+
+.gate{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;padding:24px;z-index:10}
+.gate-box{max-width:340px;width:100%}
+.gate h1{font-size:26px;font-weight:600;margin-bottom:8px}
+.gate p{color:var(--muted);margin-bottom:20px}
+.gate-check{display:flex;gap:10px;align-items:flex-start;margin-bottom:16px;cursor:pointer}
+.gate-check label{cursor:pointer;user-select:none;-webkit-user-select:none;flex:1}
+.gate-check input[type=checkbox]{margin-top:3px;accent-color:var(--me);width:20px;height:20px;flex:none;cursor:pointer}
+.gate input[type=password]{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+  border-radius:10px;padding:12px;font:inherit;margin-bottom:16px}
+.gate input[type=password]:focus{outline:none;border-color:var(--me)}
+.gate button{width:100%;background:var(--me);color:var(--me-text);border:0;border-radius:10px;padding:13px;
+  font:600 15px var(--font);cursor:pointer;transition:opacity .15s}
+.gate button:disabled{opacity:.45;cursor:default}
+.gate .note{font-size:13px;color:var(--danger);min-height:18px;margin-top:10px}
+.hidden{display:none}
+
+.viewer{position:fixed;inset:0;background:rgba(10,6,12,.92);display:grid;place-items:center;z-index:20;cursor:zoom-out}
+.viewer img{max-width:94vw;max-height:90vh;border-radius:10px}
+@media (prefers-reduced-motion:no-preference){.msg{animation:in .18s ease-out}@keyframes in{from{opacity:0;transform:translateY(4px)}}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="ava">В</div>
+    <div class="who"><b>Вероника</b><span class="status" id="status">в сети</span></div>
+    <button class="icon" id="clear" title="Очистить переписку" aria-label="Очистить переписку">🗑</button>
+    <button class="icon" id="logout" title="Сменить пароль доступа" aria-label="Сменить пароль доступа">⚙</button>
+  </header>
+  <div id="log" aria-live="polite"></div>
+  <form class="bar" id="bar">
+    <button type="button" class="icon cam" id="cam" title="Попросить фото" aria-label="Попросить фото">📷</button>
+    <textarea id="text" rows="1" placeholder="Сообщение" aria-label="Сообщение"></textarea>
+    <button class="send" id="send" aria-label="Отправить">➤</button>
+  </form>
+</div>
+
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <h1>Только для взрослых</h1>
+    <p>Здесь откровенное общение с вымышленным персонажем Вероникой. Все персонажи совершеннолетние.</p>
+    <div class="gate-check">
+      <input type="checkbox" id="adult">
+      <label for="adult">Мне исполнилось 18 лет</label>
+    </div>
+    <input type="password" id="code" placeholder="Пароль доступа"
+           autocomplete="current-password" autocorrect="off" autocapitalize="off"
+           spellcheck="false" enterkeyhint="go">
+    <button id="enter" disabled>Войти</button>
+    <div class="note" id="gateNote"></div>
+  </div>
+</div>
+
+<script>
+// Адрес твоего воркера
+const API = "https://broken-bonus-988d.vvencel2012.workers.dev";
+
+const $ = id => document.getElementById(id);
+const log = $("log"), text = $("text"), send = $("send"), statusEl = $("status");
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch{ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} },
+  del(k){ try{ localStorage.removeItem(k); }catch{} }
+};
+
+let history = store.get("veronika_history", []);
+let code = store.get("veronika_code", "");
+let busy = false;
+
+// ---------- вход ----------
+const adult = $("adult"), codeInput = $("code"), enter = $("enter"), gate = $("gate");
+let gateWatch = null;
+
+function checkGate(){
+  const ok = adult.checked && codeInput.value.trim().length > 0;
+  enter.disabled = !ok;
+}
+
+function startGateWatch(){
+  stopGateWatch();
+  gateWatch = setInterval(checkGate, 300);
+}
+function stopGateWatch(){
+  if (gateWatch){ clearInterval(gateWatch); gateWatch = null; }
+}
+
+// Все возможные события — на iOS Safari этого много, но вместе надёжно
+["change","click","input","touchstart"].forEach(ev =>
+  adult.addEventListener(ev, checkGate, { passive: true })
+);
+["input","change","keyup","paste","compositionend","focus"].forEach(ev =>
+  codeInput.addEventListener(ev, () => setTimeout(checkGate, 0))
+);
+
+// Резервная проверка (Safari iOS иногда проглатывает события от автозаполнения)
+startGateWatch();
+
+// Перепроверка при возврате на страницу
+document.addEventListener("visibilitychange", checkGate);
+window.addEventListener("pageshow", checkGate);
+
+enter.addEventListener("click", () => {
+  if (enter.disabled) return;
+  code = codeInput.value.trim();
+  store.set("veronika_code", code);
+  store.set("veronika_adult", true);
+  gate.classList.add("hidden");
+  stopGateWatch();
+  text.focus();
+});
+
+// Если уже входили ранее — сразу открываем чат
+if (store.get("veronika_adult", false) && code) {
+  gate.classList.add("hidden");
+  stopGateWatch();
+}
+
+$("logout").addEventListener("click", () => {
+  store.del("veronika_code");
+  code = "";
+  codeInput.value = "";
+  adult.checked = false;
+  checkGate();
+  $("gateNote").textContent = "";
+  gate.classList.remove("hidden");
+  startGateWatch();
+});
+
+checkGate(); // первичная проверка
+
+// ---------- отрисовка ----------
+function bubble(role, content){
+  const el = document.createElement("div");
+  if (role === "photo"){
+    el.className = "msg her photo";
+    const img = document.createElement("img");
+    img.src = content; img.alt = "Фото от Вероники"; img.loading = "lazy";
+    img.addEventListener("click", () => openViewer(content));
+    img.addEventListener("load", scrollDown);
+    el.appendChild(img);
+  } else {
+    el.className = "msg " + (role === "user" ? "me" : "her");
+    el.textContent = content;
+  }
+  log.appendChild(el); scrollDown();
+}
+function sys(t, err){
+  const el = document.createElement("div");
+  el.className = "sys" + (err ? " err" : ""); el.textContent = t;
+  log.appendChild(el); scrollDown();
+}
+function scrollDown(){ log.scrollTop = log.scrollHeight; }
+function render(){
+  log.innerHTML = "";
+  if (!history.length){
+    log.innerHTML = '<div class="empty">Напиши Веронике первым. Кнопка с камерой попросит у неё фото.</div>';
+    return;
+  }
+  history.forEach(m => bubble(m.role, m.role === "photo" ? m.url : m.content));
+}
+function save(){ store.set("veronika_history", history.slice(-80)); }
+function setStatus(t, typing){ statusEl.textContent = t; statusEl.classList.toggle("typing", !!typing); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function openViewer(url){
+  const v = document.createElement("div"); v.className = "viewer";
+  const img = document.createElement("img"); img.src = url; img.alt = "";
+  v.appendChild(img);
+  v.addEventListener("click", () => v.remove());
+  document.body.appendChild(v);
+}
+
+// ---------- сеть ----------
+function chatMessages(){
+  return history.filter(m => m.role !== "photo").map(m => ({role:m.role, content:m.content}));
+}
+
+async function call(path){
+  const r = await fetch(API + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Access-Code": code },
+    body: JSON.stringify({ messages: chatMessages() })
+  });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 403) throw new Error("Неверный пароль доступа. Нажми ⚙ и введи его заново.");
+  if (!r.ok) throw new Error(data.error || ("Ошибка сервера " + r.status));
+  return data;
+}
+
+async function sendMessage(){
+  const t = text.value.trim();
+  if (!t || busy) return;
+  if (!history.length) log.innerHTML = "";
+  text.value = ""; autosize();
+  history.push({role:"user", content:t}); save(); bubble("user", t);
+  busy = true; send.disabled = true;
+  try{
+    await sleep(600 + Math.random()*900);
+    setStatus("печатает…", true);
+    const data = await call("/chat");
+    const parts = String(data.reply || "").split("|").map(s => s.trim()).filter(Boolean);
+    for (let i = 0; i < parts.length; i++){
+      setStatus("печатает…", true);
+      await sleep(Math.min(3500, 500 + parts[i].length * 35));
+      bubble("assistant", parts[i]);
+    }
+    history.push({role:"assistant", content: parts.join(" | ")}); save();
+  }catch(e){
+    sys(e.message, true);
+  }finally{
+    busy = false; send.disabled = false; setStatus("в сети");
+  }
+}
+
+async function askPhoto(){
+  if (busy) return;
+  if (!history.length) log.innerHTML = "";
+  busy = true; send.disabled = true; $("cam").disabled = true;
+  setStatus("отправляет фото…", true);
+  try{
+    const data = await call("/image");
+    console.log("Сцена для фото:", data.scene, "; цена:", data.cost, "; секунд:", data.seconds);
+    history.push({role:"photo", url:data.url}); save(); bubble("photo", data.url);
+  }catch(e){
+    sys("Фото не пришло: " + e.message, true);
+  }finally{
+    busy = false; send.disabled = false; $("cam").disabled = false; setStatus("в сети");
+  }
+}
+
+// ---------- ввод ----------
+function autosize(){ text.style.height = "auto"; text.style.height = Math.min(text.scrollHeight, 120) + "px"; }
+text.addEventListener("input", autosize);
+text.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
+$("bar").addEventListener("submit", e => { e.preventDefault(); sendMessage(); });
+$("cam").addEventListener("click", askPhoto);
+$("clear").addEventListener("click", () => {
+  if (confirm("Удалить всю переписку?")){ history = []; save(); render(); }
+});
+
+render();
+</script>
+</body>
+</html>
