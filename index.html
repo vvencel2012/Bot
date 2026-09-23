@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Вероника</title>
+<title>ника</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -34,6 +34,7 @@ header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:
 .me{align-self:flex-end;background:var(--me);color:var(--me-text);border-bottom-right-radius:5px}
 .photo{padding:4px;max-width:70%}
 .photo img{display:block;width:100%;border-radius:12px;cursor:zoom-in}
+.photo video{display:block;width:100%;border-radius:12px;background:#000}
 .sys{align-self:center;font-size:13px;color:var(--muted);text-align:center;max-width:90%;padding:4px 0}
 .sys.err{color:var(--danger)}
 .empty{margin:auto;text-align:center;color:var(--muted);max-width:260px}
@@ -116,37 +117,29 @@ let history = store.get("veronika_history", []);
 let code = store.get("veronika_code", "");
 let busy = false;
 
+// Триггер видео
+const VIDEO_TRIGGER = /(скинь|скинешь|пришли|пришлёшь|пришлешь|отправь|запиши|сними|кинь)\s+(мне\s+)?(видео|видос|видосик)|(видео|видос|видосик)\s+(мне\s+)?(скинь|пришли|отправь|запиши|сними|кинь)/i;
+
 // ---------- вход ----------
 const adult = $("adult"), codeInput = $("code"), enter = $("enter"), gate = $("gate");
-let gateWatch = null;
 
 function checkGate(){
   const ok = adult.checked && codeInput.value.trim().length > 0;
-  enter.disabled = !ok;
+  if (enter.disabled !== !ok) enter.disabled = !ok;
 }
 
-function startGateWatch(){
-  stopGateWatch();
-  gateWatch = setInterval(checkGate, 300);
-}
-function stopGateWatch(){
-  if (gateWatch){ clearInterval(gateWatch); gateWatch = null; }
-}
+// Цикл проверки — не зависит от событий iOS Safari вообще
+(function tick(){
+  checkGate();
+  requestAnimationFrame(tick);
+})();
 
-// Все возможные события — на iOS Safari этого много, но вместе надёжно
-["change","click","input","touchstart"].forEach(ev =>
+["change","click","input","touchstart","touchend"].forEach(ev =>
   adult.addEventListener(ev, checkGate, { passive: true })
 );
-["input","change","keyup","paste","compositionend","focus"].forEach(ev =>
-  codeInput.addEventListener(ev, () => setTimeout(checkGate, 0))
+["input","change","keyup","paste","compositionend","focus","blur"].forEach(ev =>
+  codeInput.addEventListener(ev, checkGate)
 );
-
-// Резервная проверка (Safari iOS иногда проглатывает события от автозаполнения)
-startGateWatch();
-
-// Перепроверка при возврате на страницу
-document.addEventListener("visibilitychange", checkGate);
-window.addEventListener("pageshow", checkGate);
 
 enter.addEventListener("click", () => {
   if (enter.disabled) return;
@@ -154,15 +147,10 @@ enter.addEventListener("click", () => {
   store.set("veronika_code", code);
   store.set("veronika_adult", true);
   gate.classList.add("hidden");
-  stopGateWatch();
   text.focus();
 });
 
-// Если уже входили ранее — сразу открываем чат
-if (store.get("veronika_adult", false) && code) {
-  gate.classList.add("hidden");
-  stopGateWatch();
-}
+if (store.get("veronika_adult", false) && code) gate.classList.add("hidden");
 
 $("logout").addEventListener("click", () => {
   store.del("veronika_code");
@@ -172,14 +160,21 @@ $("logout").addEventListener("click", () => {
   checkGate();
   $("gateNote").textContent = "";
   gate.classList.remove("hidden");
-  startGateWatch();
 });
-
-checkGate(); // первичная проверка
 
 // ---------- отрисовка ----------
 function bubble(role, content){
   const el = document.createElement("div");
+  if (role === "video"){
+    el.className = "msg her photo";
+    const v = document.createElement("video");
+    v.src = content; v.controls = true; v.loop = true; v.muted = true;
+    v.playsInline = true; v.autoplay = true;
+    v.addEventListener("loadeddata", scrollDown);
+    el.appendChild(v);
+    log.appendChild(el); scrollDown();
+    return;
+  }
   if (role === "photo"){
     el.className = "msg her photo";
     const img = document.createElement("img");
@@ -202,10 +197,10 @@ function scrollDown(){ log.scrollTop = log.scrollHeight; }
 function render(){
   log.innerHTML = "";
   if (!history.length){
-    log.innerHTML = '<div class="empty">Напиши Веронике первым. Кнопка с камерой попросит у неё фото.</div>';
+    log.innerHTML = '<div class="empty">Напиши Веронике первым. 📷 попросит фото, фраза «скинь видео» попросит видео.</div>';
     return;
   }
-  history.forEach(m => bubble(m.role, m.role === "photo" ? m.url : m.content));
+  history.forEach(m => bubble(m.role, (m.role === "photo" || m.role === "video") ? m.url : m.content));
 }
 function save(){ store.set("veronika_history", history.slice(-80)); }
 function setStatus(t, typing){ statusEl.textContent = t; statusEl.classList.toggle("typing", !!typing); }
@@ -221,14 +216,15 @@ function openViewer(url){
 
 // ---------- сеть ----------
 function chatMessages(){
-  return history.filter(m => m.role !== "photo").map(m => ({role:m.role, content:m.content}));
+  return history.filter(m => m.role === "user" || m.role === "assistant")
+                .map(m => ({role:m.role, content:m.content}));
 }
 
-async function call(path){
+async function call(path, extra){
   const r = await fetch(API + path, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Access-Code": code },
-    body: JSON.stringify({ messages: chatMessages() })
+    body: JSON.stringify(Object.assign({ messages: chatMessages() }, extra || {}))
   });
   const data = await r.json().catch(() => ({}));
   if (r.status === 403) throw new Error("Неверный пароль доступа. Нажми ⚙ и введи его заново.");
@@ -259,6 +255,58 @@ async function sendMessage(){
   }finally{
     busy = false; send.disabled = false; setStatus("в сети");
   }
+  if (VIDEO_TRIGGER.test(t)) startVideo();
+}
+
+// ---------- видео ----------
+let videoPending = store.get("veronika_video_task", null);
+
+function lastPhotoUrl(){
+  for (let i = history.length - 1; i >= 0; i--) if (history[i].role === "photo") return history[i].url;
+  return "";
+}
+
+async function startVideo(){
+  if (videoPending){ sys("Вероника ещё записывает прошлое видео"); return; }
+  setStatus("записывает видео…", true);
+  try{
+    const data = await call("/video", { lastPhoto: lastPhotoUrl() });
+    console.log("Сцена для видео:", data.scene);
+    videoPending = { taskid: data.taskid, started: Date.now() };
+    store.set("veronika_video_task", videoPending);
+    pollVideo();
+  }catch(e){
+    setStatus("в сети");
+    sys("Видео не пришло: " + e.message, true);
+  }
+}
+
+async function pollVideo(){
+  if (!videoPending) return;
+  setStatus("записывает видео…", true);
+  if (Date.now() - videoPending.started > 15 * 60 * 1000){
+    videoPending = null; store.del("veronika_video_task"); setStatus("в сети");
+    sys("Видео идёт дольше 15 минут. Проверь Task History на Wiro.", true);
+    return;
+  }
+  try{
+    const r = await fetch(API + "/video-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Access-Code": code },
+      body: JSON.stringify({ taskid: videoPending.taskid })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ("Ошибка сервера " + r.status));
+    if (!data.done){ setTimeout(pollVideo, 5000); return; }
+
+    videoPending = null; store.del("veronika_video_task"); setStatus("в сети");
+    if (data.error){ sys("Видео не пришло: " + data.error, true); return; }
+    console.log("Видео готово; цена:", data.cost, "; секунд:", data.seconds);
+    history.push({role:"video", url:data.url}); save(); bubble("video", data.url);
+  }catch(e){
+    console.warn("Проверка видео:", e.message);
+    setTimeout(pollVideo, 8000);
+  }
 }
 
 async function askPhoto(){
@@ -288,6 +336,7 @@ $("clear").addEventListener("click", () => {
 });
 
 render();
+if (videoPending) pollVideo();
 </script>
 </body>
 </html>
